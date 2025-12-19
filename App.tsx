@@ -71,7 +71,7 @@ const App: React.FC = () => {
         console.error("Failed to parse saved shows:", err);
       }
     }
-    return []; // Start empty and let useEffect fetch or use defaults
+    return []; 
   });
   
   const [dataSource, setDataSource] = useState<'local' | 'server' | 'default'>('default');
@@ -85,10 +85,8 @@ const App: React.FC = () => {
   const [sharedData, setSharedData] = useState<TVShowSeason[] | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
 
-  // Initial Data Loading Logic
   useEffect(() => {
     const loadInitialData = async () => {
-      // 1. Check URL for shared data
       const params = new URLSearchParams(window.location.search);
       const dataParam = params.get('data');
       if (dataParam) {
@@ -99,14 +97,13 @@ const App: React.FC = () => {
           const parsedData = JSON.parse(decoded);
           if (Array.isArray(parsedData)) {
             setSharedData(parsedData);
-            return; // URL data takes priority for the banner
+            return;
           }
         } catch (err) {
           console.error("Failed to parse shared data from URL", err);
         }
       }
 
-      // 2. Check LocalStorage
       const saved = localStorage.getItem('cinetrack_shows');
       if (saved && JSON.parse(saved).length > 0) {
         setShows(JSON.parse(saved));
@@ -114,9 +111,9 @@ const App: React.FC = () => {
         return;
       }
 
-      // 3. Try fetching data.json from server (Master List)
       try {
-        const response = await fetch('/data.json');
+        // Changed to relative path 'data.json' for GitHub Pages compatibility
+        const response = await fetch('data.json');
         if (response.ok) {
           const masterData = await response.json();
           if (Array.isArray(masterData)) {
@@ -129,7 +126,6 @@ const App: React.FC = () => {
         console.log("No data.json found on server, using defaults.");
       }
 
-      // 4. Fallback to hardcoded defaults
       setShows(DEFAULT_SHOWS);
       setDataSource('default');
     };
@@ -137,7 +133,6 @@ const App: React.FC = () => {
     loadInitialData();
   }, []);
 
-  // Sync to LocalStorage whenever shows change
   useEffect(() => {
     if (shows.length > 0) {
       localStorage.setItem('cinetrack_shows', JSON.stringify(shows));
@@ -276,7 +271,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8">
-      {/* Shared Data Banner */}
       {sharedData && (
         <div className="fixed top-0 left-0 right-0 z-[60] bg-indigo-600 p-3 shadow-2xl flex items-center justify-center gap-4 animate-in slide-in-from-top duration-300">
           <div className="flex items-center gap-2 text-white">
@@ -290,7 +284,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Header Container */}
       <div className="max-w-[1800px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-6 mb-8">
         <div className="flex items-center gap-4 shrink-0">
           <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-600/20">
