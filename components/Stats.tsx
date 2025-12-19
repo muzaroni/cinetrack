@@ -80,11 +80,14 @@ const Stats: React.FC<StatsProps> = ({ shows, isFiltered, selectedYear }) => {
   const funInsights = useMemo(() => {
     if (shows.length === 0) return null;
 
-    const avgRating = shows.reduce((acc, s) => acc + s.userRating, 0) / shows.length;
+    // FIX: Use explicit typing for reduce to ensure result is treated as a number
+    const totalUserRating = shows.reduce((acc: number, s: TVShowSeason) => acc + (s.userRating || 0), 0);
+    const avgRating = totalUserRating / shows.length;
     
     let persona = { title: "The Casual Viewer", desc: "Just getting started with the collection.", icon: <Tv /> };
     if (avgRating >= 4.5) persona = { title: "The Easy Pleaser", desc: "You find the gold in everything you watch!", icon: <Award className="text-yellow-400" /> };
     else if (avgRating >= 3.8) persona = { title: "The Connoisseur", desc: "You have refined taste but know quality when you see it.", icon: <Award className="text-indigo-400" /> };
+    // The comparison below depends on avgRating being correctly inferred as a number
     else if (avgRating <= 2.5) persona = { title: "The Harsh Critic", desc: "Extremely hard to impress.", icon: <Skull className="text-red-500" /> };
     else persona = { title: "The Goldilocks", desc: "Not too high, not too low.", icon: <Target className="text-green-400" /> };
 
@@ -93,7 +96,9 @@ const Stats: React.FC<StatsProps> = ({ shows, isFiltered, selectedYear }) => {
       acc[g] = (acc[g] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
-    const topGenres = Object.entries(genreCounts)
+    
+    // FIX: Cast Object.entries to ensure b[1] and a[1] are recognized as numbers for subtraction
+    const topGenres = (Object.entries(genreCounts) as [string, number][])
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3);
 

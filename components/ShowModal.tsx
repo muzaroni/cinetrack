@@ -147,7 +147,7 @@ const ShowModal: React.FC<ShowModalProps> = ({ isOpen, onClose, onSave, initialS
                   className={`w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 outline-none font-black text-base ${STATUS_TEXT_COLORS[formData.status || ShowStatus.WATCHING]}`}
                 >
                   {Object.values(ShowStatus).map(s => (
-                    <option key={s} value={s} className={STATUS_TEXT_COLORS[s]}>{s}</option>
+                    <option key={s} value={s} className={`bg-slate-950 ${STATUS_TEXT_COLORS[s]}`}>{s}</option>
                   ))}
                 </select>
               </div>
