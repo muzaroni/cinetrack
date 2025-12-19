@@ -1,5 +1,5 @@
 {
-  "name": "Copy of CineTrack",
+  "name": "CineTrack",
   "description": "A high-performance dashboard to track TV show seasons with automated metadata fetching via Gemini AI and Google Search integration.",
   "requestFramePermissions": []
 }

@@ -6,7 +6,8 @@ import ShowModal from './components/ShowModal';
 import Stats from './components/Stats';
 import { 
   Plus, Search, LayoutGrid, BarChart3, ChevronDown, ChevronUp, 
-  ExternalLink, Youtube, Info, Trash2, Edit2, Calendar, Tv, Ticket
+  ExternalLink, Youtube, Info, Trash2, Edit2, Calendar, Tv, Ticket,
+  Download, Upload, Archive
 } from 'lucide-react';
 
 const DEFAULT_SHOWS: TVShowSeason[] = [
@@ -24,9 +25,10 @@ const DEFAULT_SHOWS: TVShowSeason[] = [
       trailer: 'https://www.youtube.com/watch?v=UHiwdDLuJ_s'
     },
     status: ShowStatus.WATCHING,
-    review: "Incredible tension and character growth. The cinematography in the kitchen scenes remains unmatched. Carmy's journey is both heartbreaking and inspiring.",
+    review: "Incredible tension and character growth. The cinematography in the kitchen scenes remains unmatched.",
     synopsis: "Carmy, Sydney, and Richie work to transform their grimy sandwich shop into a next-level dining destination.",
     isOngoing: true,
+    startDate: '2025-01-10',
     createdAt: Date.now() - 1000
   },
   {
@@ -43,9 +45,10 @@ const DEFAULT_SHOWS: TVShowSeason[] = [
       trailer: 'https://www.youtube.com/watch?v=t3DREm9uL8E'
     },
     status: ShowStatus.COMPLETED,
-    review: "The perfect ending to a near-perfect show. The writing is sharp, cruel, and hilarious. A masterclass in ensemble acting.",
-    synopsis: "The sale of media conglomerate Waystar Royco to tech visionary Lukas Matsson moves ever closer, shaking up the Roy family.",
+    review: "The perfect ending to a near-perfect show. The writing is sharp, cruel, and hilarious.",
+    synopsis: "The sale of media conglomerate Waystar Royco to tech visionary Lukas Matsson moves ever closer.",
     isOngoing: false,
+    endDate: '2024-05-28',
     createdAt: Date.now() - 2000
   }
 ];
@@ -57,6 +60,7 @@ const App: React.FC = () => {
     return parsed.length > 0 ? parsed : DEFAULT_SHOWS;
   });
   const [view, setView] = useState<ViewType>('grid');
+  const [selectedYear, setSelectedYear] = useState<string>('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingShow, setEditingShow] = useState<TVShowSeason | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -74,15 +78,34 @@ const App: React.FC = () => {
     return `https://${trimmed}`;
   };
 
+  // Extract all available years from show data
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    shows.forEach(s => {
+      const date = s.endDate || s.startDate || new Date(s.createdAt).toISOString().split('T')[0];
+      const year = date.split('-')[0];
+      if (year) years.add(year);
+    });
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [shows]);
+
   const filteredShows = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    return shows.filter(s => 
-      s.title.toLowerCase().includes(q) ||
-      s.network.toLowerCase().includes(q) ||
-      s.status.toLowerCase().includes(q) ||
-      s.genres.some(g => g.toLowerCase().includes(q))
-    ).sort((a, b) => b.createdAt - a.createdAt);
-  }, [shows, searchQuery]);
+    return shows.filter(s => {
+      // Search filter
+      const matchesSearch = s.title.toLowerCase().includes(q) ||
+        s.network.toLowerCase().includes(q) ||
+        s.status.toLowerCase().includes(q) ||
+        s.genres.some(g => g.toLowerCase().includes(q));
+      
+      if (!matchesSearch) return false;
+
+      // Year filter
+      if (selectedYear === 'All') return true;
+      const date = s.endDate || s.startDate || new Date(s.createdAt).toISOString().split('T')[0];
+      return date.startsWith(selectedYear);
+    }).sort((a, b) => b.createdAt - a.createdAt);
+  }, [shows, searchQuery, selectedYear]);
 
   const handleSaveShow = (newShow: TVShowSeason) => {
     if (editingShow) {
@@ -107,10 +130,40 @@ const App: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const exportData = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(shows));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `cinetrack_backup_${new Date().toISOString().split('T')[0]}.json`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const importData = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const content = JSON.parse(e.target?.result as string);
+          if (Array.isArray(content)) {
+            if (confirm(`Import ${content.length} entries? This will merge with your current list.`)) {
+              setShows(prev => [...content, ...prev.filter(p => !content.find(c => c.id === p.id))]);
+            }
+          }
+        } catch (err) {
+          alert('Invalid JSON file.');
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8">
       {/* Header Container */}
-      <div className="max-w-[1800px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-6 mb-12">
+      <div className="max-w-[1800px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-6 mb-8">
         {/* Brand/Logo */}
         <div className="flex items-center gap-4 shrink-0">
           <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-600/20">
@@ -122,8 +175,8 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Action Controls - Search & Buttons in one row */}
-        <div className="flex flex-col md:flex-row items-center gap-4 w-full lg:max-w-4xl">
+        {/* Action Controls */}
+        <div className="flex flex-col md:flex-row items-center gap-4 w-full lg:max-w-5xl">
           <div className="relative group flex-1 w-full">
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
             <input 
@@ -136,6 +189,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
+            {/* View Toggles */}
             <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 shadow-xl">
               <button 
                 onClick={() => setView('grid')}
@@ -153,6 +207,17 @@ const App: React.FC = () => {
               </button>
             </div>
 
+            {/* Data Actions */}
+            <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 shadow-xl">
+               <button onClick={exportData} className="p-2 text-slate-400 hover:text-white transition-colors" title="Export Backup">
+                 <Download className="w-4 h-4" />
+               </button>
+               <label className="p-2 text-slate-400 hover:text-white transition-colors cursor-pointer" title="Import Backup">
+                 <Upload className="w-4 h-4" />
+                 <input type="file" className="hidden" accept=".json" onChange={importData} />
+               </label>
+            </div>
+
             <button 
               onClick={() => { setEditingShow(null); setIsModalOpen(true); }}
               className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all shadow-xl shadow-indigo-600/20 active:scale-95 text-sm whitespace-nowrap"
@@ -161,6 +226,29 @@ const App: React.FC = () => {
               Add Season
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Year Selector / Navigation */}
+      <div className="max-w-[1800px] mx-auto mb-12 flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
+        <button 
+          onClick={() => setSelectedYear('All')}
+          className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all border ${selectedYear === 'All' ? 'bg-white text-slate-950 border-white shadow-lg' : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-600'}`}
+        >
+          All Time
+        </button>
+        {availableYears.map(year => (
+          <button 
+            key={year}
+            onClick={() => setSelectedYear(year)}
+            className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all border ${selectedYear === year ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-600'}`}
+          >
+            {year}
+          </button>
+        ))}
+        <div className="ml-auto flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-widest px-4 border-l border-slate-800">
+           <Archive className="w-3.5 h-3.5" />
+           {selectedYear === 'All' ? 'Full Archive' : `${selectedYear} View`}
         </div>
       </div>
 
@@ -224,7 +312,6 @@ const App: React.FC = () => {
                               </div>
                             </td>
                             <td className="p-5">
-                               {/* Grid layout ensuring 2 per row - 3 links results in 2+1 */}
                                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-lg font-black tracking-tight">
                                   {validRatings.map((rating, idx) => (
                                     <a 
@@ -314,16 +401,6 @@ const App: React.FC = () => {
                                                     <Ticket className="w-4 h-4 text-red-400" /> RT
                                                 </a>
                                             )}
-                                            {show.urls.metacritic && (
-                                                <a href={normalizeUrl(show.urls.metacritic)} target="_blank" rel="noreferrer" className="flex items-center gap-3 px-6 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold hover:border-green-500 transition-all shadow-xl">
-                                                    <ExternalLink className="w-4 h-4 text-green-400" /> Metacritic
-                                                </a>
-                                            )}
-                                            {show.urls.myanimelist && (
-                                                <a href={normalizeUrl(show.urls.myanimelist)} target="_blank" rel="noreferrer" className="flex items-center gap-3 px-6 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold hover:border-blue-500 transition-all shadow-xl">
-                                                    <ExternalLink className="w-4 h-4 text-blue-400" /> MAL
-                                                </a>
-                                            )}
                                          </div>
                                       </div>
                                       <div className="space-y-8">
@@ -361,6 +438,15 @@ const App: React.FC = () => {
                         </React.Fragment>
                       );
                     })}
+                    {filteredShows.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="p-32 text-center text-slate-600">
+                           <Archive className="w-16 h-16 mx-auto mb-8 opacity-10" />
+                           <p className="text-2xl font-black text-slate-500 tracking-tight">Nothing in the {selectedYear === 'All' ? 'archive' : selectedYear} vault</p>
+                           <p className="text-sm mt-2 text-slate-600 uppercase font-bold tracking-widest">Try switching years or adding a new show</p>
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -368,7 +454,7 @@ const App: React.FC = () => {
           </div>
         ) : (
           <div className="max-w-[1800px] mx-auto">
-            <Stats shows={shows} />
+            <Stats shows={filteredShows} isFiltered={selectedYear !== 'All'} selectedYear={selectedYear} />
           </div>
         )}
       </div>
