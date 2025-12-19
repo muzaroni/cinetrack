@@ -320,9 +320,10 @@ const App: React.FC = () => {
                                       target="_blank" 
                                       rel="noreferrer" 
                                       onClick={e => e.stopPropagation()} 
-                                      className={`${rating.color} hover:underline truncate`}
+                                      className="hover:underline truncate"
                                     >
-                                      {rating.label}: {rating.value}
+                                      <span className="text-slate-500">{rating.label}: </span>
+                                      <span className={rating.color}>{rating.value}</span>
                                     </a>
                                   ))}
                                </div>
