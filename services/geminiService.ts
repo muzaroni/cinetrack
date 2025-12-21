@@ -2,6 +2,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AggregateRatings, ShowURLs } from "../types";
 
+// Always use the process.env.API_KEY directly as per guidelines
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
 export interface FetchShowResult {
   network: string;
   genres: string[];
@@ -13,22 +16,33 @@ export interface FetchShowResult {
   endDate: string;
   episodeCount: number;
   avgEpisodeLength: number;
-  sources?: { title: string; uri: string }[];
 }
 
 export const fetchShowMetadata = async (title: string, season: number): Promise<Partial<FetchShowResult>> => {
-  // Initialization must happen right before use with process.env.API_KEY
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-
   try {
-    const prompt = `Find comprehensive metadata for Season ${season} of the TV series "${title}".
-    Provide URLs for IMDb, Rotten Tomatoes, Metacritic, and a YouTube trailer.
-    Include current scores for these platforms. 
-    Include total episode count and average length per episode in minutes.
-    Provide a concise synopsis (max 3 sentences).`;
+    const prompt = `Perform an exhaustive and precise search for the TV series "${title}" to find metadata specifically for Season ${season}.
+    
+    CRITICAL INSTRUCTIONS FOR EXTERNAL LINKS:
+    1. IMDb: Find the official series page. Extract Title ID (tt...).
+    2. Rotten Tomatoes: Find the specific TV show season page (e.g., rottentomatoes.com/tv/show_name/s0${season}). Extract the Tomatometer score.
+    3. Metacritic: Find the specific TV show season page.
+    4. MyAnimeList: Only provide if this is an Anime series.
+    5. Trailer: Find the official YouTube trailer for specifically Season ${season} of "${title}".
+    
+    METADATA REQUIREMENTS:
+    - Official Network
+    - Primary Genres
+    - Episode Count for this specific season
+    - Average Episode Length (in minutes)
+    - IMDb rating (numeric)
+    - Rotten Tomatoes Tomatometer score (numeric 0-100)
+    - Metacritic score (numeric)
+    - MyAnimeList score (if applicable)
+    - A 2-3 sentence synopsis of Season ${season}
+    - Airing status and approximate air dates (YYYY-MM-DD format if possible).`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
@@ -54,29 +68,16 @@ export const fetchShowMetadata = async (title: string, season: number): Promise<
             startDate: { type: Type.STRING },
             endDate: { type: Type.STRING }
           },
-          required: ["network", "genres", "synopsis"]
+          required: ["network", "genres", "synopsis", "imdbUrl", "episodeCount", "avgEpisodeLength"]
         }
       }
     });
 
-    const data = JSON.parse(response.text || '{}');
-
-    // Extract grounding sources as required by guidelines
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    const sources = groundingChunks?.map((chunk: any) => ({
-      title: chunk.web?.title || 'Source',
-      uri: chunk.web?.uri || ''
-    })).filter((s: any) => s.uri) || [];
+    const data = JSON.parse(response.text);
 
     return {
       network: data.network || 'Unknown',
       genres: data.genres || [],
-      episodeCount: data.episodeCount || 0,
-      avgEpisodeLength: data.avgEpisodeLength || 0,
-      synopsis: data.synopsis || '',
-      startDate: data.startDate || '',
-      endDate: data.endDate || '',
-      isOngoing: !!data.isOngoing,
       aggregateRatings: {
         imdb: data.imdbRating,
         rottenTomatoes: data.rottenTomatoesScore,
@@ -90,10 +91,15 @@ export const fetchShowMetadata = async (title: string, season: number): Promise<
         myanimelist: data.myAnimeListUrl,
         trailer: data.trailerUrl
       },
-      sources
+      synopsis: data.synopsis,
+      isOngoing: data.isOngoing,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      episodeCount: data.episodeCount,
+      avgEpisodeLength: data.avgEpisodeLength
     };
   } catch (error) {
-    console.error("Gemini Metadata Fetch Error:", error);
+    console.error("Error fetching show metadata:", error);
     return {};
   }
 };

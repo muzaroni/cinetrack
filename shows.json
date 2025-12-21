@@ -1,0 +1,17 @@
+[
+  {
+    "id": "starter-1",
+    "title": "CineTrack Demo",
+    "seasonNumber": 1,
+    "network": "Cloud",
+    "genres": ["Web", "Guide"],
+    "userRating": 5.0,
+    "aggregateRatings": { "imdb": 9.9 },
+    "urls": { "imdb": "https://github.com" },
+    "status": "Completed",
+    "review": "Replace this file with your own exported shows.json on GitHub Pages to share your library!",
+    "synopsis": "This entry was loaded from your repository's shows.json file.",
+    "isOngoing": false,
+    "createdAt": 1700000000000
+  }
+]

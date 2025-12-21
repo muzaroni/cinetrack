@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { TVShowSeason, ShowStatus, AggregateRatings, ShowURLs } from '../types';
 import { fetchShowMetadata } from '../services/geminiService';
-import { X, Search, Loader2, Sparkles, Youtube, Globe, MonitorPlay, Ticket, Clock, List, ExternalLink, Star, Calendar, Hash, Tag, BarChart3, ShieldCheck } from 'lucide-react';
+import { X, Search, Loader2, Sparkles, Youtube, Globe, MonitorPlay, Ticket, Clock, List, ExternalLink, Star, Calendar, Hash, Tag, BarChart3 } from 'lucide-react';
 import { STATUS_TEXT_COLORS, getRatingColor } from '../constants';
 
 interface ShowModalProps {
@@ -14,7 +14,6 @@ interface ShowModalProps {
 
 const ShowModal: React.FC<ShowModalProps> = ({ isOpen, onClose, onSave, initialShow }) => {
   const [loading, setLoading] = useState(false);
-  const [aiSources, setAiSources] = useState<{title: string, uri: string}[]>([]);
   const [formData, setFormData] = useState<Partial<TVShowSeason>>({
     title: '',
     seasonNumber: 1,
@@ -33,28 +32,22 @@ const ShowModal: React.FC<ShowModalProps> = ({ isOpen, onClose, onSave, initialS
   });
 
   useEffect(() => {
-    if (initialShow) {
-      setFormData(initialShow);
-      setAiSources([]);
-    }
-    else {
-      setAiSources([]);
-      setFormData({
-        title: '',
-        seasonNumber: 1,
-        status: ShowStatus.WATCHING,
-        userRating: 3.0,
-        network: '',
-        genres: [],
-        review: '',
-        synopsis: '',
-        aggregateRatings: {},
-        urls: {},
-        isOngoing: false,
-        episodeCount: 1,
-        avgEpisodeLength: 30
-      });
-    }
+    if (initialShow) setFormData(initialShow);
+    else setFormData({
+      title: '',
+      seasonNumber: 1,
+      status: ShowStatus.WATCHING,
+      userRating: 3.0,
+      network: '',
+      genres: [],
+      review: '',
+      synopsis: '',
+      aggregateRatings: {},
+      urls: {},
+      isOngoing: false,
+      episodeCount: 1,
+      avgEpisodeLength: 30
+    });
   }, [initialShow, isOpen]);
 
   const handleSearch = async () => {
@@ -68,9 +61,6 @@ const ShowModal: React.FC<ShowModalProps> = ({ isOpen, onClose, onSave, initialS
       aggregateRatings: { ...prev.aggregateRatings, ...metadata.aggregateRatings },
       urls: { ...prev.urls, ...metadata.urls }
     }));
-    if (metadata.sources) {
-      setAiSources(metadata.sources);
-    }
     setLoading(false);
   };
 
@@ -138,24 +128,6 @@ const ShowModal: React.FC<ShowModalProps> = ({ isOpen, onClose, onSave, initialS
                 </button>
               </div>
             </div>
-
-            {aiSources.length > 0 && (
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="md:w-32 shrink-0"></div>
-                <div className="flex-1 bg-indigo-500/5 border border-indigo-500/10 rounded-xl p-3">
-                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                    <ShieldCheck className="w-3 h-3" /> Grounding Sources
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {aiSources.map((source, i) => (
-                      <a key={i} href={source.uri} target="_blank" rel="noreferrer" className="text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded-md text-slate-400 flex items-center gap-1 transition-colors">
-                        <ExternalLink className="w-2.5 h-2.5" /> {source.title}
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col md:flex-row md:items-center gap-4">
@@ -182,7 +154,7 @@ const ShowModal: React.FC<ShowModalProps> = ({ isOpen, onClose, onSave, initialS
             </div>
           </div>
 
-          {/* User Rating Section */}
+          {/* User Rating Section - Redesigned to be in-line like the aggregate scores */}
           <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 flex flex-col lg:flex-row lg:items-center gap-8">
             <div className="shrink-0 lg:w-48 space-y-0.5">
               <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
@@ -231,7 +203,7 @@ const ShowModal: React.FC<ShowModalProps> = ({ isOpen, onClose, onSave, initialS
             </div>
           </div>
 
-          {/* Aggregate Ratings Prominent Section */}
+          {/* Aggregate Ratings Prominent Section - Re-designed to have heading in-line */}
           <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 flex flex-col lg:flex-row lg:items-center gap-6">
             <div className="shrink-0 lg:w-48 space-y-0.5">
               <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
