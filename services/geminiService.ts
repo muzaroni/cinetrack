@@ -26,7 +26,7 @@ export const fetchShowMetadata = async (title: string, season: number): Promise<
     2. Rotten Tomatoes: Find the specific TV show season page (e.g., rottentomatoes.com/tv/show_name/s0${season}). Extract the Tomatometer score.
     3. Metacritic: Find the specific TV show season page.
     4. MyAnimeList: Only provide if this is an Anime series.
-    5. Trailer: Find the official YouTube trailer for specifically Season ${season} of "${title}".
+    5. Trailer: You MUST find the official YouTube trailer for specifically Season ${season} of "${title}". When searching, strictly use the query format: "${title} Season ${season} official trailer". Ensure the URL is a direct link to the correct season trailer.
     
     METADATA REQUIREMENTS:
     - Official Network
