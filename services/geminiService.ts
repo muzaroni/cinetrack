@@ -1,15 +1,9 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { AggregateRatings, ShowURLs } from "../types";
 
-// Safe initialization for hosted environments
-const getAIClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    console.warn("Gemini API Key is missing. Search features will be disabled.");
-    return null;
-  }
-  return new GoogleGenAI({ apiKey });
-};
+// Always use the process.env.API_KEY directly as per guidelines
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export interface FetchShowResult {
   network: string;
@@ -25,17 +19,15 @@ export interface FetchShowResult {
 }
 
 export const fetchShowMetadata = async (title: string, season: number): Promise<Partial<FetchShowResult>> => {
-  const ai = getAIClient();
-  if (!ai) return {};
-
   try {
     const prompt = `Perform an exhaustive and precise search for the TV series "${title}" to find metadata specifically for Season ${season}.
     
     CRITICAL INSTRUCTIONS FOR EXTERNAL LINKS:
     1. IMDb: Find the official series page. Extract Title ID (tt...).
-    2. Rotten Tomatoes: Find the specific TV show season page (e.g., rottentomatoes.com/tv/show_name/s0${season}).
+    2. Rotten Tomatoes: Find the specific TV show season page (e.g., rottentomatoes.com/tv/show_name/s0${season}). Extract the Tomatometer score.
     3. Metacritic: Find the specific TV show season page.
-    4. Trailer: Find the official YouTube trailer for specifically Season ${season} of "${title}".
+    4. MyAnimeList: Only provide if this is an Anime series.
+    5. Trailer: Find the official YouTube trailer for specifically Season ${season} of "${title}".
     
     METADATA REQUIREMENTS:
     - Official Network
@@ -45,6 +37,7 @@ export const fetchShowMetadata = async (title: string, season: number): Promise<
     - IMDb rating (numeric)
     - Rotten Tomatoes Tomatometer score (numeric 0-100)
     - Metacritic score (numeric)
+    - MyAnimeList score (if applicable)
     - A 2-3 sentence synopsis of Season ${season}
     - Airing status and approximate air dates (YYYY-MM-DD format if possible).`;
 
@@ -64,28 +57,23 @@ export const fetchShowMetadata = async (title: string, season: number): Promise<
             imdbRating: { type: Type.NUMBER },
             rottenTomatoesScore: { type: Type.NUMBER },
             metacriticScore: { type: Type.NUMBER },
+            myAnimeListScore: { type: Type.NUMBER },
             trailerUrl: { type: Type.STRING },
             imdbUrl: { type: Type.STRING },
             rottenTomatoesUrl: { type: Type.STRING },
             metacriticUrl: { type: Type.STRING },
+            myAnimeListUrl: { type: Type.STRING },
             synopsis: { type: Type.STRING },
             isOngoing: { type: Type.BOOLEAN },
             startDate: { type: Type.STRING },
             endDate: { type: Type.STRING }
           },
-          required: ["network", "genres", "synopsis", "imdbUrl"]
+          required: ["network", "genres", "synopsis", "imdbUrl", "episodeCount", "avgEpisodeLength"]
         }
       }
     });
 
-    let jsonText = response.text;
-    
-    // Cleanup any markdown formatting if present
-    if (jsonText.includes('```')) {
-      jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
-    }
-
-    const data = JSON.parse(jsonText);
+    const data = JSON.parse(response.text);
 
     return {
       network: data.network || 'Unknown',
@@ -93,12 +81,14 @@ export const fetchShowMetadata = async (title: string, season: number): Promise<
       aggregateRatings: {
         imdb: data.imdbRating,
         rottenTomatoes: data.rottenTomatoesScore,
-        metacritic: data.metacriticScore
+        metacritic: data.metacriticScore,
+        myanimelist: data.myAnimeListScore
       },
       urls: {
         imdb: data.imdbUrl,
         rottenTomatoes: data.rottenTomatoesUrl,
         metacritic: data.metacriticUrl,
+        myanimelist: data.myAnimeListUrl,
         trailer: data.trailerUrl
       },
       synopsis: data.synopsis,
