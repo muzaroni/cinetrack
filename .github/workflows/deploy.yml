@@ -1,0 +1,33 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inject Secrets into config.ts
+        run: |
+          sed -i "s|FIREBASE_API_KEY_PLACEHOLDER|${{ secrets.FIREBASE_API_KEY }}|g" config.ts
+          sed -i "s|FIREBASE_AUTH_DOMAIN_PLACEHOLDER|${{ secrets.FIREBASE_AUTH_DOMAIN }}|g" config.ts
+          sed -i "s|FIREBASE_PROJECT_ID_PLACEHOLDER|${{ secrets.FIREBASE_PROJECT_ID }}|g" config.ts
+          sed -i "s|FIREBASE_STORAGE_BUCKET_PLACEHOLDER|${{ secrets.FIREBASE_STORAGE_BUCKET }}|g" config.ts
+          sed -i "s|FIREBASE_MESSAGING_SENDER_ID_PLACEHOLDER|${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}|g" config.ts
+          sed -i "s|FIREBASE_APP_ID_PLACEHOLDER|${{ secrets.FIREBASE_APP_ID }}|g" config.ts
+          sed -i "s|GEMINI_API_KEY_PLACEHOLDER|${{ secrets.GEMINI_API_KEY }}|g" config.ts
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.' # Adjust this if you have a build step (e.g., './dist')
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
