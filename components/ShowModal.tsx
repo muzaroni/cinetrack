@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
-import { TVShowSeason, ShowStatus, AggregateRatings, ShowURLs } from '../types';
+import { TVShowSeason, ShowStatus } from '../types';
 import { fetchShowMetadata } from '../services/geminiService';
-import { X, Search, Loader2, Sparkles, Youtube, Globe, MonitorPlay, Ticket, Clock, List, ExternalLink, Star, Calendar, Hash, Tag, BarChart3 } from 'lucide-react';
+import { X, Search, Loader2, Sparkles, Youtube, Globe, MonitorPlay, Ticket, Clock, List, ExternalLink, Star, Calendar, Tag, BarChart3 } from 'lucide-react';
 import { STATUS_TEXT_COLORS, getRatingColor } from '../constants';
 
 interface ShowModalProps {
@@ -154,7 +153,7 @@ const ShowModal: React.FC<ShowModalProps> = ({ isOpen, onClose, onSave, initialS
             </div>
           </div>
 
-          {/* User Rating Section - Redesigned to be in-line like the aggregate scores */}
+          {/* User Rating Section */}
           <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 flex flex-col lg:flex-row lg:items-center gap-8">
             <div className="shrink-0 lg:w-48 space-y-0.5">
               <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
@@ -203,7 +202,7 @@ const ShowModal: React.FC<ShowModalProps> = ({ isOpen, onClose, onSave, initialS
             </div>
           </div>
 
-          {/* Aggregate Ratings Prominent Section - Re-designed to have heading in-line */}
+          {/* Aggregate Ratings Section */}
           <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800 flex flex-col lg:flex-row lg:items-center gap-6">
             <div className="shrink-0 lg:w-48 space-y-0.5">
               <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">

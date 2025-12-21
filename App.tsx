@@ -5,8 +5,8 @@ import ShowModal from './components/ShowModal';
 import Stats from './components/Stats';
 import { 
   Plus, Search, LayoutGrid, BarChart3, ChevronDown, ChevronUp, 
-  ExternalLink, Youtube, Info, Trash2, Edit2, Calendar, Tv, Ticket, Globe,
-  Download, Upload, Archive, ArrowUpDown, ChevronRight, MessageSquare, Layers
+  Youtube, Info, Trash2, Edit2, Tv, Ticket, Globe,
+  Download, Upload, Archive, ArrowUpDown, MessageSquare
 } from 'lucide-react';
 
 type SortType = 
@@ -466,7 +466,7 @@ const App: React.FC = () => {
             </div>
           </div>
         ) : (
-          <Stats shows={filteredShows} isFiltered={selectedYear !== 'All'} selectedYear={selectedYear} />
+          <Stats shows={filteredShows} selectedYear={selectedYear} />
         )}
       </div>
 

@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { AggregateRatings, ShowURLs } from "../types";
 
@@ -73,7 +72,8 @@ export const fetchShowMetadata = async (title: string, season: number): Promise<
       }
     });
 
-    const data = JSON.parse(response.text);
+    const text = response.text || '{}';
+    const data = JSON.parse(text);
 
     return {
       network: data.network || 'Unknown',
