@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { TVShowSeason, ShowStatus, ViewType } from './types';
 import { getRatingColor, STATUS_COLORS, getNetworkColorClass } from './constants';
@@ -6,8 +5,8 @@ import ShowModal from './components/ShowModal';
 import Stats from './components/Stats';
 import { 
   Plus, Search, LayoutGrid, BarChart3, ChevronDown, ChevronUp, 
-  Youtube, Info, Trash2, Edit2, Tv, Ticket, Globe,
-  Download, Upload, Archive, ArrowUpDown, MessageSquare, Link as LinkIcon
+  Youtube, Info, Trash2, Edit2, Tv, Globe,
+  Download, Upload, ArrowUpDown, MessageSquare, Link as LinkIcon
 } from 'lucide-react';
 
 type SortType = 

@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { TVShowSeason, ShowStatus, GroundingLink } from '../types';
+import { TVShowSeason, ShowStatus } from '../types';
 import { fetchShowMetadata } from '../services/geminiService';
 import { X, Search, Loader2, Sparkles, Youtube, Globe, MonitorPlay, Ticket, Clock, List, ExternalLink, Star, Calendar, Tag, BarChart3, Link as LinkIcon } from 'lucide-react';
 import { STATUS_TEXT_COLORS, getRatingColor } from '../constants';
