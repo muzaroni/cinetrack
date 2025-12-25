@@ -22,11 +22,6 @@ export interface ShowURLs {
   trailer?: string;
 }
 
-export interface GroundingLink {
-  title: string;
-  uri: string;
-}
-
 export interface TVShowSeason {
   id: string;
   title: string;
@@ -45,7 +40,6 @@ export interface TVShowSeason {
   createdAt: number;
   episodeCount?: number;
   avgEpisodeLength?: number;
-  groundingLinks?: GroundingLink[];
 }
 
 export type ViewType = 'grid' | 'stats';
