@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { TVShowSeason, ShowStatus, ViewType } from './types';
 import { getRatingColor, STATUS_COLORS, getNetworkColorClass } from './constants';
@@ -5,8 +6,9 @@ import ShowModal from './components/ShowModal';
 import Stats from './components/Stats';
 import { 
   Plus, Search, LayoutGrid, BarChart3, ChevronDown, ChevronUp, 
-  Youtube, Info, Trash2, Edit2, Tv, Ticket, Globe,
-  Download, Upload, Archive, ArrowUpDown, MessageSquare
+  Youtube, Info, Trash2, Edit2, Tv, Globe,
+  Download, Upload, Archive, ArrowUpDown, MessageSquare, 
+  Settings, Cloud, CloudOff, Loader2, CheckCircle2, AlertCircle, X, Github
 } from 'lucide-react';
 
 type SortType = 
@@ -15,6 +17,13 @@ type SortType =
   | 'title-asc' | 'title-desc' 
   | 'season-desc' | 'season-asc' 
   | 'date-desc';
+
+interface GitHubConfig {
+  token: string;
+  owner: string;
+  repo: string;
+  path: string;
+}
 
 const DEFAULT_SHOWS: TVShowSeason[] = [
   {
@@ -36,26 +45,6 @@ const DEFAULT_SHOWS: TVShowSeason[] = [
     isOngoing: true,
     startDate: '2025-01-10',
     createdAt: Date.now() - 1000
-  },
-  {
-    id: 'default-2',
-    title: 'Succession',
-    seasonNumber: 4,
-    network: 'HBO',
-    genres: ['Drama', 'Satire'],
-    userRating: 5.0,
-    aggregateRatings: { imdb: 8.9, metacritic: 92, rottenTomatoes: 97 },
-    urls: { 
-      imdb: 'https://www.imdb.com/title/tt7632684/',
-      rottenTomatoes: 'https://www.rottentomatoes.com/tv/succession/s04',
-      trailer: 'https://www.youtube.com/watch?v=t3DREm9uL8E'
-    },
-    status: ShowStatus.COMPLETED,
-    review: "The perfect ending to a near-perfect show. The writing is sharp, cruel, and hilarious.",
-    synopsis: "The sale of media conglomerate Waystar Royco to tech visionary Lukas Matsson moves ever closer.",
-    isOngoing: false,
-    endDate: '2024-05-28',
-    createdAt: Date.now() - 2000
   }
 ];
 
@@ -66,9 +55,20 @@ const App: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState<string>('All');
   const [sortType, setSortType] = useState<SortType>('created-desc');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [editingShow, setEditingShow] = useState<TVShowSeason | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // GitHub Sync State
+  const [ghConfig, setGhConfig] = useState<GitHubConfig>({
+    token: localStorage.getItem('gh_token') || '',
+    owner: localStorage.getItem('gh_owner') || '',
+    repo: localStorage.getItem('gh_repo') || '',
+    path: 'shows.json'
+  });
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [syncMessage, setSyncMessage] = useState('');
 
   useEffect(() => {
     const initializeData = async () => {
@@ -83,7 +83,6 @@ const App: React.FC = () => {
         }
       }
 
-      // If no local storage, attempt to fetch from shows.json
       try {
         const response = await fetch('./shows.json');
         if (response.ok) {
@@ -93,7 +92,6 @@ const App: React.FC = () => {
           setShows(DEFAULT_SHOWS);
         }
       } catch (err) {
-        console.warn("No shows.json found, using defaults.");
         setShows(DEFAULT_SHOWS);
       }
       setIsDataLoaded(true);
@@ -107,6 +105,76 @@ const App: React.FC = () => {
       localStorage.setItem('cinetrack_shows', JSON.stringify(shows));
     }
   }, [shows, isDataLoaded]);
+
+  const saveGhConfig = (config: GitHubConfig) => {
+    setGhConfig(config);
+    localStorage.setItem('gh_token', config.token);
+    localStorage.setItem('gh_owner', config.owner);
+    localStorage.setItem('gh_repo', config.repo);
+  };
+
+  const syncToGitHub = async () => {
+    if (!ghConfig.token || !ghConfig.owner || !ghConfig.repo) {
+      setIsSettingsOpen(true);
+      return;
+    }
+
+    setSyncStatus('syncing');
+    setSyncMessage('Fetching repository state...');
+
+    try {
+      // 1. Get the current file SHA (needed for update)
+      const getFileRes = await fetch(
+        `https://api.github.com/repos/${ghConfig.owner}/${ghConfig.repo}/contents/${ghConfig.path}`,
+        {
+          headers: {
+            Authorization: `token ${ghConfig.token}`,
+            Accept: 'application/vnd.github.v3+json'
+          }
+        }
+      );
+
+      let sha = '';
+      if (getFileRes.ok) {
+        const fileData = await getFileRes.json();
+        sha = fileData.sha;
+      }
+
+      setSyncMessage('Pushing updates to GitHub...');
+
+      // 2. Commit the new shows.json content
+      const content = btoa(unescape(encodeURIComponent(JSON.stringify(shows, null, 2))));
+      const updateRes = await fetch(
+        `https://api.github.com/repos/${ghConfig.owner}/${ghConfig.repo}/contents/${ghConfig.path}`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `token ${ghConfig.token}`,
+            Accept: 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            message: `Update shows.json archive [${new Date().toLocaleString()}]`,
+            content: content,
+            sha: sha || undefined
+          })
+        }
+      );
+
+      if (updateRes.ok) {
+        setSyncStatus('success');
+        setSyncMessage('Successfully pushed to GitHub');
+        setTimeout(() => setSyncStatus('idle'), 3000);
+      } else {
+        const err = await updateRes.json();
+        throw new Error(err.message || 'Failed to update file');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setSyncStatus('error');
+      setSyncMessage(err.message || 'Sync failed');
+    }
+  };
 
   const normalizeUrl = (url?: string): string => {
     if (!url) return '';
@@ -135,7 +203,6 @@ const App: React.FC = () => {
         s.genres.some(g => g.toLowerCase().includes(q));
       
       if (!matchesSearch) return false;
-
       if (selectedYear === 'All') return true;
       const date = s.endDate || s.startDate || new Date(s.createdAt).toISOString().split('T')[0];
       return date.startsWith(selectedYear);
@@ -143,25 +210,15 @@ const App: React.FC = () => {
 
     result.sort((a, b) => {
       switch (sortType) {
-        case 'rating-desc':
-          return b.userRating - a.userRating;
-        case 'rating-asc':
-          return a.userRating - b.userRating;
-        case 'title-asc':
-          return a.title.localeCompare(b.title);
-        case 'title-desc':
-          return b.title.localeCompare(a.title);
-        case 'season-desc':
-          return b.seasonNumber - a.seasonNumber;
-        case 'season-asc':
-          return a.seasonNumber - b.seasonNumber;
-        case 'date-desc':
-          const dateA = a.startDate || '';
-          const dateB = b.startDate || '';
-          return dateB.localeCompare(dateA);
+        case 'rating-desc': return b.userRating - a.userRating;
+        case 'rating-asc': return a.userRating - b.userRating;
+        case 'title-asc': return a.title.localeCompare(b.title);
+        case 'title-desc': return b.title.localeCompare(a.title);
+        case 'season-desc': return b.seasonNumber - a.seasonNumber;
+        case 'season-asc': return a.seasonNumber - b.seasonNumber;
+        case 'date-desc': return (b.startDate || '').localeCompare(a.startDate || '');
         case 'created-desc':
-        default:
-          return b.createdAt - a.createdAt;
+        default: return b.createdAt - a.createdAt;
       }
     });
 
@@ -180,8 +237,7 @@ const App: React.FC = () => {
 
   const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    e.preventDefault();
-    if (window.confirm('Are you sure you want to delete this season? This action cannot be undone.')) {
+    if (window.confirm('Delete this entry permanently?')) {
       setShows(prev => prev.filter(s => s.id !== id));
       if (expandedId === id) setExpandedId(null);
     }
@@ -189,287 +245,208 @@ const App: React.FC = () => {
 
   const handleEdit = (show: TVShowSeason, e: React.MouseEvent) => {
     e.stopPropagation();
-    e.preventDefault();
     setEditingShow(show);
     setIsModalOpen(true);
   };
 
-  const handleColumnSort = (field: 'rating' | 'title' | 'season') => {
-    if (field === 'rating') {
-      setSortType(sortType === 'rating-desc' ? 'rating-asc' : 'rating-desc');
-    } else if (field === 'title') {
-      setSortType(sortType === 'title-asc' ? 'title-desc' : 'title-asc');
-    } else if (field === 'season') {
-      setSortType(sortType === 'season-desc' ? 'season-asc' : 'season-desc');
-    }
-  };
-
-  const renderSortIcon = (field: 'rating' | 'title' | 'season') => {
-    if (field === 'rating') {
-      if (sortType === 'rating-desc') return <ChevronDown className="w-3.5 h-3.5" />;
-      if (sortType === 'rating-asc') return <ChevronUp className="w-3.5 h-3.5" />;
-    } else if (field === 'title') {
-      if (sortType === 'title-asc') return <ChevronUp className="w-3.5 h-3.5" />;
-      if (sortType === 'title-desc') return <ChevronDown className="w-3.5 h-3.5" />;
-    } else if (field === 'season') {
-      if (sortType === 'season-desc') return <ChevronDown className="w-3.5 h-3.5" />;
-      if (sortType === 'season-asc') return <ChevronUp className="w-3.5 h-3.5" />;
-    }
-    return <ArrowUpDown className="w-3 h-3 opacity-30 group-hover:opacity-100 transition-opacity" />;
-  };
-
-  const exportData = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(shows, null, 2));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", `shows.json`);
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-  };
-
-  const importData = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const content = JSON.parse(e.target?.result as string);
-          if (Array.isArray(content)) {
-            if (confirm(`Import ${content.length} entries? This will merge with your current list.`)) {
-              setShows(prev => [...content, ...prev.filter(p => !content.find(c => c.id === p.id))]);
-            }
-          }
-        } catch (err) {
-          alert('Invalid JSON file.');
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
-
-  if (!isDataLoaded) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Tv className="w-12 h-12 text-indigo-500 animate-pulse" />
-          <span className="text-slate-500 text-xs font-black uppercase tracking-widest">Opening Vault...</span>
-        </div>
-      </div>
-    );
-  }
+  if (!isDataLoaded) return null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8">
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+          <div className="bg-slate-900 w-full max-w-md rounded-2xl border border-slate-800 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+              <h2 className="text-lg font-black flex items-center gap-2">
+                <Github className="w-5 h-5 text-indigo-400" /> GitHub Sync Settings
+              </h2>
+              <button onClick={() => setIsSettingsOpen(false)} className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Personal Access Token</label>
+                <input type="password" value={ghConfig.token} onChange={e => saveGhConfig({ ...ghConfig, token: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-600" placeholder="ghp_xxxxxxxxxxxx" />
+                <p className="text-[9px] text-slate-500 italic">Requires 'contents: write' scope.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Username</label>
+                  <input type="text" value={ghConfig.owner} onChange={e => saveGhConfig({ ...ghConfig, owner: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="octocat" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Repo Name</label>
+                  <input type="text" value={ghConfig.repo} onChange={e => saveGhConfig({ ...ghConfig, repo: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="tv-archive" />
+                </div>
+              </div>
+              <div className="pt-4 border-t border-slate-800">
+                <button onClick={() => setIsSettingsOpen(false)} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-xl shadow-indigo-600/20 transition-all">Save Config</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main App Container */}
       <div className="max-w-[1800px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-6 mb-8">
         <div className="flex items-center gap-4 shrink-0">
-          <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-600/20">
-            <Tv className="w-8 h-8 text-white" />
-          </div>
+          <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-600/20 transition-transform hover:scale-105"><Tv className="w-8 h-8 text-white" /></div>
           <div>
             <h1 className="text-2xl font-black tracking-tight text-white leading-none mb-1">CineTrack</h1>
-            <p className="text-slate-500 text-xs font-medium uppercase tracking-widest">Season Archive</p>
+            <p className="text-slate-500 text-xs font-medium uppercase tracking-widest">Standalone Vault</p>
           </div>
         </div>
 
-        <div className="flex flex-col md:flex-row items-center gap-4 w-full lg:max-w-5xl">
+        <div className="flex flex-col md:flex-row items-center gap-4 w-full lg:max-w-6xl">
           <div className="relative group flex-1 w-full">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
-            <input 
-              type="text" 
-              placeholder="Search series, network, or status..."
-              className="w-full bg-slate-900/50 border border-slate-800 rounded-xl py-3 pl-12 pr-6 text-sm outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent transition-all shadow-inner font-medium"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-indigo-400" />
+            <input type="text" placeholder="Search archive..." className="w-full bg-slate-900/50 border border-slate-800 rounded-xl py-3.5 pl-12 pr-6 text-sm outline-none focus:ring-2 focus:ring-indigo-600 transition-all font-medium" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            <div className="relative group/sort">
-              <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-400 shadow-xl focus-within:ring-2 focus-within:ring-indigo-600 transition-all">
-                <ArrowUpDown className="w-3.5 h-3.5" />
-                <select 
-                  value={sortType}
-                  onChange={(e) => setSortType(e.target.value as SortType)}
-                  className="bg-slate-900 border-none outline-none text-xs font-bold text-slate-200 cursor-pointer appearance-none pr-4"
-                >
-                  <option value="created-desc">Recently Added</option>
-                  <option value="rating-desc">Highest Rated</option>
-                  <option value="rating-asc">Lowest Rated</option>
-                  <option value="title-asc">Title (A-Z)</option>
-                  <option value="title-desc">Title (Z-A)</option>
-                  <option value="season-desc">Season Number (High)</option>
-                  <option value="season-asc">Season Number (Low)</option>
-                  <option value="date-desc">Release Date</option>
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 absolute right-3 pointer-events-none text-slate-500" />
-              </div>
+            {/* Cloud Sync Tooltip/Status */}
+            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl px-2 py-1 gap-1 shadow-xl">
+              <button 
+                onClick={syncToGitHub} 
+                disabled={syncStatus === 'syncing'}
+                className={`p-2 rounded-lg transition-all flex items-center gap-2 group relative ${syncStatus === 'error' ? 'text-red-400 bg-red-400/10' : syncStatus === 'success' ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-400 hover:text-white'}`}
+                title="Sync to GitHub"
+              >
+                {syncStatus === 'syncing' ? <Loader2 className="w-4 h-4 animate-spin" /> : 
+                 syncStatus === 'success' ? <CheckCircle2 className="w-4 h-4" /> :
+                 syncStatus === 'error' ? <AlertCircle className="w-4 h-4" /> :
+                 ghConfig.token ? <Cloud className="w-4 h-4" /> : <CloudOff className="w-4 h-4" />}
+                
+                {syncStatus !== 'idle' && <span className="text-[10px] font-black uppercase tracking-widest pr-1 animate-in fade-in slide-in-from-right-2">{syncMessage}</span>}
+              </button>
+              <button onClick={() => setIsSettingsOpen(true)} className="p-2 text-slate-500 hover:text-white transition-colors border-l border-slate-800"><Settings className="w-4 h-4" /></button>
             </div>
 
             <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 shadow-xl">
-              <button onClick={() => setView('grid')} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${view === 'grid' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}>
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span className="text-xs font-bold">Grid</span>
-              </button>
-              <button onClick={() => setView('stats')} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${view === 'stats' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}>
-                <BarChart3 className="w-3.5 h-3.5" />
-                <span className="text-xs font-bold">Stats</span>
-              </button>
+              <button onClick={() => setView('grid')} className={`p-2.5 rounded-lg transition-all ${view === 'grid' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}><LayoutGrid className="w-4 h-4" /></button>
+              <button onClick={() => setView('stats')} className={`p-2.5 rounded-lg transition-all ${view === 'stats' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}><BarChart3 className="w-4 h-4" /></button>
             </div>
-
-            <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 shadow-xl">
-               <button onClick={exportData} className="p-2 text-slate-400 hover:text-white transition-colors" title="Export as shows.json">
-                 <Download className="w-4 h-4" />
-               </button>
-               <label className="p-2 text-slate-400 hover:text-white transition-colors cursor-pointer" title="Import JSON">
-                 <Upload className="w-4 h-4" />
-                 <input type="file" className="hidden" accept=".json" onChange={importData} />
-               </label>
-            </div>
-
-            <button 
-              onClick={() => { setEditingShow(null); setIsModalOpen(true); }}
-              className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all shadow-xl shadow-indigo-600/20 active:scale-95 text-sm whitespace-nowrap"
-            >
-              <Plus className="w-4 h-4" />
-              Add Season
-            </button>
+            
+            <button onClick={() => { setEditingShow(null); setIsModalOpen(true); }} className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black transition-all shadow-xl shadow-indigo-600/20 active:scale-95 text-sm whitespace-nowrap"><Plus className="w-4 h-4" /> Add Season</button>
           </div>
         </div>
       </div>
 
-      <div className="max-w-[1800px] mx-auto mb-12 flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
-        <button onClick={() => setSelectedYear('All')} className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all border ${selectedYear === 'All' ? 'bg-white text-slate-950 border-white shadow-lg' : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-600'}`}>All Time</button>
+      <div className="max-w-[1800px] mx-auto mb-10 flex items-center gap-3 overflow-x-auto pb-4 scrollbar-hide">
+        <button onClick={() => setSelectedYear('All')} className={`px-5 py-2.5 rounded-xl text-xs font-black whitespace-nowrap border transition-all ${selectedYear === 'All' ? 'bg-white text-slate-950 border-white shadow-lg' : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-600'}`}>Full Timeline</button>
         {availableYears.map(year => (
-          <button key={year} onClick={() => setSelectedYear(year)} className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all border ${selectedYear === year ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-600'}`}>{year}</button>
+          <button key={year} onClick={() => setSelectedYear(year)} className={`px-5 py-2.5 rounded-xl text-xs font-black whitespace-nowrap border transition-all ${selectedYear === year ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-600'}`}>{year}</button>
         ))}
-        <div className="ml-auto flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-widest px-4 border-l border-slate-800">
-           <Archive className="w-3.5 h-3.5" />
-           {selectedYear === 'All' ? 'Full Archive' : `${selectedYear} View`}
-        </div>
       </div>
 
       <div className="max-w-[1800px] mx-auto">
         {view === 'grid' ? (
-          <div className="space-y-8">
-            <div className="bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse table-fixed min-w-[1200px]">
-                  <thead>
-                    <tr className="border-b border-slate-800 bg-slate-900/50">
-                      <th className={`px-5 py-3 text-xs font-black uppercase tracking-widest w-[28%] cursor-pointer select-none group transition-colors ${sortType.includes('title') ? 'text-indigo-400' : 'text-slate-500 hover:text-slate-300'}`} onClick={() => handleColumnSort('title')}>
-                        <div className="flex items-center gap-2">Title & Genres {renderSortIcon('title')}</div>
-                      </th>
-                      <th className={`px-5 py-3 text-xs font-black uppercase tracking-widest w-[6%] text-center cursor-pointer select-none group transition-colors ${sortType.includes('season') ? 'text-indigo-400' : 'text-slate-500 hover:text-slate-300'}`} onClick={() => handleColumnSort('season')}>
-                        <div className="flex items-center justify-center gap-2">Season {renderSortIcon('season')}</div>
-                      </th>
-                      <th className={`px-5 py-3 text-xs font-black uppercase tracking-widest w-[15%] cursor-pointer select-none group transition-colors ${sortType.includes('rating') ? 'text-indigo-400' : 'text-slate-500 hover:text-slate-300'}`} onClick={() => handleColumnSort('rating')}>
-                        <div className="flex items-center gap-2">User Rating {renderSortIcon('rating')}</div>
-                      </th>
-                      <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-widest w-[18%]">Aggregates</th>
-                      <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-widest w-[12%]">Network</th>
-                      <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-widest w-[13%]">Status</th>
-                      <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-widest w-[4%] text-center">Trailer</th>
-                      <th className="px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-widest w-[4%]"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {filteredShows.map(show => {
-                      const validRatings = [
-                        show.aggregateRatings.imdb && show.urls.imdb && { label: 'IMDb', value: show.aggregateRatings.imdb, url: show.urls.imdb, color: 'text-yellow-500' },
-                        show.aggregateRatings.rottenTomatoes && show.urls.rottenTomatoes && { label: 'RT', value: show.aggregateRatings.rottenTomatoes + '%', url: show.urls.rottenTomatoes, color: 'text-red-500' },
-                        show.aggregateRatings.metacritic && show.urls.metacritic && { label: 'Meta', value: show.aggregateRatings.metacritic, url: show.urls.metacritic, color: 'text-green-500' },
-                        show.aggregateRatings.myanimelist && show.urls.myanimelist && { label: 'MAL', value: show.aggregateRatings.myanimelist, url: show.urls.myanimelist, color: 'text-blue-400' },
-                      ].filter(Boolean) as { label: string; value: string | number; url: string; color: string }[];
-
-                      return (
-                        <React.Fragment key={show.id}>
-                          <tr onClick={() => setExpandedId(expandedId === show.id ? null : show.id)} className={`hover:bg-slate-800/40 transition-colors cursor-pointer group/row ${expandedId === show.id ? 'bg-indigo-500/10' : ''}`}>
-                            <td className="px-5 py-2.5">
-                              <div className="flex items-center gap-4">
-                                {expandedId === show.id ? <ChevronUp className="w-6 h-6 text-indigo-400 shrink-0" /> : <ChevronDown className="w-6 h-6 text-slate-600 group-hover/row:text-slate-400 shrink-0" />}
-                                <div className="min-w-0">
-                                  <div className="font-bold text-white text-xl truncate leading-tight mb-1 tracking-tight">{show.title}</div>
-                                  <div className="flex flex-wrap gap-1.5">{show.genres.slice(0, 3).map(g => (<span key={g} className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400 font-bold whitespace-nowrap">{g}</span>))}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-5 py-2.5 text-center"><span className="bg-slate-800 px-3 py-1.5 rounded-full text-sm font-black text-slate-200">{show.seasonNumber}</span></td>
-                            <td className="px-5 py-2.5">
-                              <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shrink-0" style={{ backgroundColor: getRatingColor(show.userRating) + '20', color: getRatingColor(show.userRating), border: `1px solid ${getRatingColor(show.userRating)}40` }}>{show.userRating.toFixed(1)}</div>
-                                <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden"><div className="h-full transition-all duration-700" style={{ width: `${(show.userRating / 5) * 100}%`, backgroundColor: getRatingColor(show.userRating) }} /></div>
-                              </div>
-                            </td>
-                            <td className="px-5 py-2.5">
-                               <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-lg font-black tracking-tight">
-                                  {validRatings.map((rating, idx) => (<a key={idx} href={normalizeUrl(rating.url)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="hover:underline truncate"><span className="text-slate-500">{rating.label}: </span><span className={rating.color}>{rating.value}</span></a>))}
-                               </div>
-                            </td>
-                            <td className="px-5 py-2.5 truncate"><span className={`font-black text-xl transition-colors ${getNetworkColorClass(show.network)}`}>{show.network}</span></td>
-                            <td className="px-5 py-2.5"><span className={`px-2 py-1 rounded text-[11px] font-black border uppercase tracking-widest block text-center ${STATUS_COLORS[show.status]}`}>{show.status}</span></td>
-                            <td className="px-5 py-2.5 text-center">
-                              <div className="flex items-center justify-center">{show.urls.trailer ? (<a href={normalizeUrl(show.urls.trailer)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-red-600 hover:text-red-500 transition-colors inline-block"><Youtube className="w-7 h-7" /></a>) : <span className="text-slate-800">—</span>}</div>
-                            </td>
-                            <td className="px-5 py-2.5 text-right">
-                              <div className="flex flex-col items-end gap-2 opacity-0 group-hover/row:opacity-100 transition-opacity">
-                                <button onClick={(e) => handleEdit(show, e)} className="p-2 text-slate-400 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 rounded-lg shadow-sm" title="Edit Season"><Edit2 className="w-4 h-4" /></button>
-                                <button onClick={(e) => handleDelete(show.id, e)} className="p-2 text-slate-400 hover:text-red-400 transition-colors bg-slate-800 hover:bg-red-950/30 rounded-lg shadow-sm" title="Delete Entry"><Trash2 className="w-4 h-4" /></button>
-                              </div>
-                            </td>
-                          </tr>
-                          {expandedId === show.id && (
-                            <tr className="bg-slate-950 shadow-inner">
-                              <td colSpan={8} className="p-0 border-t border-slate-800 animate-in fade-in slide-in-from-top-4 duration-200">
-                                 <div className="p-6">
-                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start mb-6">
-                                      <div className="space-y-3">
-                                         <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><Info className="w-3.5 h-3.5 text-indigo-400" /> Season Synopsis</h4>
-                                         <p className="text-slate-300 text-sm leading-relaxed line-clamp-4 italic">{show.synopsis || "No synopsis available."}</p>
-                                      </div>
-                                      <div className="space-y-3">
-                                         <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><MessageSquare className="w-3.5 h-3.5 text-emerald-400" /> Personal Thoughts</h4>
-                                         <p className="text-slate-300 text-sm leading-relaxed line-clamp-4">{show.review || "No personal review written yet."}</p>
-                                      </div>
-                                   </div>
-                                   <div className="flex flex-wrap items-center gap-6 pt-5 border-t border-slate-900">
-                                      <div className="flex items-center gap-5">
-                                         <div className="flex flex-col"><span className="text-[9px] font-black text-slate-600 uppercase tracking-tighter">Network</span><span className={`text-xs font-bold ${getNetworkColorClass(show.network)}`}>{show.network}</span></div>
-                                         <div className="flex flex-col"><span className="text-[9px] font-black text-slate-600 uppercase tracking-tighter">Status</span><div className="flex items-center gap-1.5 mt-0.5"><div className={`w-1.5 h-1.5 rounded-full ${show.isOngoing ? 'bg-green-500 animate-pulse' : 'bg-slate-600'}`} /><span className="text-xs font-bold text-slate-300">{show.isOngoing ? 'Ongoing' : 'Ended'}</span></div></div>
-                                         <div className="flex flex-col"><span className="text-[9px] font-black text-slate-600 uppercase tracking-tighter">Schedule</span><span className="text-xs font-bold text-slate-300">{show.startDate || 'TBA'} {show.endDate ? `— ${show.endDate}` : ''}</span></div>
-                                         <div className="flex flex-col"><span className="text-[9px] font-black text-slate-600 uppercase tracking-tighter">Genres</span><span className="text-xs font-bold text-slate-300">{show.genres.slice(0, 4).join(', ')}</span></div>
-                                      </div>
-                                      <div className="ml-auto flex items-center gap-2">
-                                         {show.urls.imdb && (<a href={normalizeUrl(show.urls.imdb)} target="_blank" rel="noreferrer" className="p-2 bg-slate-900 border border-slate-800 rounded-lg hover:border-yellow-500/50 transition-all text-slate-400 hover:text-yellow-500" title="IMDb"><Globe className="w-3.5 h-3.5" /></a>)}
-                                         {show.urls.rottenTomatoes && (<a href={normalizeUrl(show.urls.rottenTomatoes)} target="_blank" rel="noreferrer" className="p-2 bg-slate-900 border border-slate-800 rounded-lg hover:border-red-500/50 transition-all text-slate-400 hover:text-red-500" title="Rotten Tomatoes"><Ticket className="w-3.5 h-3.5" /></a>)}
-                                         {show.urls.trailer && (<a href={normalizeUrl(show.urls.trailer)} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-3 py-1.5 bg-red-600/10 border border-red-600/20 rounded-lg text-red-500 hover:bg-red-600/20 transition-all text-[10px] font-black uppercase tracking-widest"><Youtube className="w-3.5 h-3.5" /> Watch Trailer</a>)}
-                                      </div>
-                                   </div>
-                                 </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                    {filteredShows.length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="p-32 text-center text-slate-600">
-                           <Archive className="w-16 h-16 mx-auto mb-8 opacity-10" />
-                           <p className="text-2xl font-black text-slate-500 tracking-tight">Nothing in the {selectedYear === 'All' ? 'archive' : selectedYear} vault</p>
+          <div className="bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse table-fixed min-w-[1200px]">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-900/50">
+                    <th className="px-5 py-4 text-xs font-black uppercase tracking-widest w-[28%] text-slate-500">Series Title</th>
+                    <th className="px-5 py-4 text-xs font-black uppercase tracking-widest w-[6%] text-center text-slate-500">Ssn</th>
+                    <th className="px-5 py-4 text-xs font-black uppercase tracking-widest w-[15%] text-slate-500">Personal Rating</th>
+                    <th className="px-5 py-4 text-xs font-black uppercase tracking-widest w-[18%] text-slate-500">Aggregates</th>
+                    <th className="px-5 py-4 text-xs font-black uppercase tracking-widest w-[12%] text-slate-500">Platform</th>
+                    <th className="px-5 py-4 text-xs font-black uppercase tracking-widest w-[13%] text-slate-500">Status</th>
+                    <th className="px-5 py-4 text-xs font-black uppercase tracking-widest w-[8%] text-center text-slate-500">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/50">
+                  {filteredShows.map(show => (
+                    <React.Fragment key={show.id}>
+                      <tr onClick={() => setExpandedId(expandedId === show.id ? null : show.id)} className={`hover:bg-slate-800/30 transition-colors cursor-pointer group/row ${expandedId === show.id ? 'bg-indigo-500/5' : ''}`}>
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-4">
+                            {expandedId === show.id ? <ChevronUp className="w-5 h-5 text-indigo-400" /> : <ChevronDown className="w-5 h-5 text-slate-600 group-hover/row:text-slate-400" />}
+                            <div className="min-w-0">
+                              <div className="font-bold text-white text-lg truncate leading-tight tracking-tight">{show.title}</div>
+                              <div className="flex flex-wrap gap-1.5 mt-1">{show.genres.slice(0, 2).map(g => (<span key={g} className="text-[9px] bg-slate-800/80 px-2 py-0.5 rounded text-slate-400 font-black uppercase tracking-tighter">{g}</span>))}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-center"><span className="bg-slate-950 border border-slate-800 px-3 py-1 rounded-lg text-sm font-black text-slate-200">{show.seasonNumber}</span></td>
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-base shrink-0" style={{ backgroundColor: getRatingColor(show.userRating) + '15', color: getRatingColor(show.userRating), border: `1px solid ${getRatingColor(show.userRating)}30` }}>{show.userRating.toFixed(1)}</div>
+                            <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden"><div className="h-full transition-all duration-1000" style={{ width: `${(show.userRating / 5) * 100}%`, backgroundColor: getRatingColor(show.userRating) }} /></div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3">
+                           <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] font-black">
+                              {show.aggregateRatings.imdb && <div className="truncate"><span className="text-slate-600 uppercase">IMDb:</span> <span className="text-yellow-500">{show.aggregateRatings.imdb}</span></div>}
+                              {show.aggregateRatings.rottenTomatoes && <div className="truncate"><span className="text-slate-600 uppercase">RT:</span> <span className="text-red-500">{show.aggregateRatings.rottenTomatoes}%</span></div>}
+                              {show.aggregateRatings.metacritic && <div className="truncate"><span className="text-slate-600 uppercase">MC:</span> <span className="text-emerald-500">{show.aggregateRatings.metacritic}</span></div>}
+                           </div>
+                        </td>
+                        <td className="px-5 py-3 truncate font-black text-base transition-colors"><span className={getNetworkColorClass(show.network)}>{show.network}</span></td>
+                        <td className="px-5 py-3"><span className={`px-2 py-1 rounded text-[10px] font-black border uppercase tracking-widest block text-center shadow-sm ${STATUS_COLORS[show.status]}`}>{show.status}</span></td>
+                        <td className="px-5 py-3 text-center">
+                          <div className="flex items-center justify-center gap-2 opacity-0 group-hover/row:opacity-100 transition-opacity">
+                            <button onClick={(e) => handleEdit(show, e)} className="p-2 text-slate-400 hover:text-white bg-slate-800 rounded-lg transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={(e) => handleDelete(show.id, e)} className="p-2 text-slate-400 hover:text-red-400 bg-slate-800 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </div>
                         </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      {expandedId === show.id && (
+                        <tr className="bg-slate-950/80 border-l-2 border-indigo-500 animate-in slide-in-from-top-2 duration-300">
+                          <td colSpan={7} className="p-6 border-t border-slate-800">
+                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                                <div className="lg:col-span-8 space-y-6">
+                                   <div>
+                                      <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-3"><Info className="w-3.5 h-3.5 text-indigo-400" /> Story Concept</h4>
+                                      <p className="text-slate-300 text-sm leading-relaxed max-w-3xl">{show.synopsis || "Plot description not available for this entry."}</p>
+                                   </div>
+                                   <div>
+                                      <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-3"><MessageSquare className="w-3.5 h-3.5 text-emerald-400" /> Season Critique</h4>
+                                      <p className="text-slate-300 text-sm leading-relaxed italic border-l-2 border-slate-800 pl-4">{show.review || "No personal review has been logged yet."}</p>
+                                   </div>
+                                </div>
+                                <div className="lg:col-span-4 space-y-6 border-l border-slate-800/50 pl-8">
+                                   <div>
+                                      <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Resources</h4>
+                                      <div className="flex flex-col gap-2">
+                                        {show.urls.trailer && (
+                                          <a href={normalizeUrl(show.urls.trailer)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="flex items-center gap-2 px-3 py-2 bg-red-600/10 border border-red-600/20 rounded-lg text-red-500 hover:bg-red-600/20 transition-all text-xs font-black uppercase tracking-widest">
+                                            <Youtube className="w-4 h-4" /> Watch Trailer
+                                          </a>
+                                        )}
+                                        {show.urls.imdb && (
+                                          <a href={normalizeUrl(show.urls.imdb)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="flex items-center gap-2 px-3 py-2 bg-yellow-600/10 border border-yellow-600/20 rounded-lg text-yellow-500 hover:bg-yellow-600/20 transition-all text-xs font-black uppercase tracking-widest">
+                                            <Globe className="w-4 h-4" /> IMDb Entry
+                                          </a>
+                                        )}
+                                      </div>
+                                   </div>
+                                   <div className="pt-4 border-t border-slate-800/50 grid grid-cols-2 gap-4">
+                                      <div>
+                                        <span className="text-[9px] font-black text-slate-600 uppercase tracking-tighter block mb-0.5">Runtime</span>
+                                        <span className="text-xs font-bold text-slate-400">{show.avgEpisodeLength}m / eps</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[9px] font-black text-slate-600 uppercase tracking-tighter block mb-0.5">Episodes</span>
+                                        <span className="text-xs font-bold text-slate-400">{show.episodeCount} Total</span>
+                                      </div>
+                                   </div>
+                                </div>
+                             </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                  {filteredShows.length === 0 && (
+                    <tr><td colSpan={7} className="p-32 text-center text-slate-600 font-black uppercase tracking-widest opacity-20"><Archive className="w-12 h-12 mx-auto mb-4" /> Archive Empty</td></tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-        ) : (
-          <Stats shows={filteredShows} selectedYear={selectedYear} />
-        )}
+        ) : <Stats shows={filteredShows} selectedYear={selectedYear} />}
       </div>
-
       <ShowModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveShow} initialShow={editingShow} />
     </div>
   );
